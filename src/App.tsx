@@ -1,233 +1,411 @@
+import { useState } from 'react'
 import './App.css'
 
-type WorkCategory = '開発' | '会議' | 'レビュー' | '設計' | '調査'
+type Priority = '高' | '中' | '低'
 
-type WorkRecord = {
+type KpiItem = {
+  label: string
+  value: string
+  helper: string
+}
+
+type DailyMetric = {
+  day: string
+  phoneHours: number
+  sleepHours: number
+}
+
+type TodoItem = {
   id: number
-  date: string
-  dayLabel: string
   title: string
-  category: WorkCategory
-  durationHours: number
-  note: string
+  priority: Priority
+  due: string
+  completed: boolean
 }
 
-type CategorySummary = {
-  category: WorkCategory
-  hours: number
-  color: string
+type PhoneUsageDraft = {
+  date: string
+  hours: string
+  memo: string
 }
 
-const weeklyHours = [
-  { label: '木', hours: 6.5 },
-  { label: '金', hours: 7.25 },
-  { label: '土', hours: 2.5 },
-  { label: '日', hours: 1.75 },
-  { label: '月', hours: 8 },
-  { label: '火', hours: 6.75 },
-  { label: '水', hours: 7.5 },
+type SleepDraft = {
+  bedtime: string
+  sleepStart: string
+  wakeTime: string
+  satisfaction: string
+}
+
+type TodoDraft = {
+  title: string
+  priority: Priority
+  due: string
+}
+
+const dailyMetrics: DailyMetric[] = [
+  { day: '木', phoneHours: 4.2, sleepHours: 6.5 },
+  { day: '金', phoneHours: 3.8, sleepHours: 7.1 },
+  { day: '土', phoneHours: 5.6, sleepHours: 8.0 },
+  { day: '日', phoneHours: 4.9, sleepHours: 7.6 },
+  { day: '月', phoneHours: 3.4, sleepHours: 6.8 },
+  { day: '火', phoneHours: 3.1, sleepHours: 7.3 },
+  { day: '水', phoneHours: 2.8, sleepHours: 7.4 },
 ]
 
-const categorySummaries: CategorySummary[] = [
-  { category: '開発', hours: 18.5, color: '#4b5563' },
-  { category: '会議', hours: 7, color: '#9ca3af' },
-  { category: 'レビュー', hours: 5.5, color: '#6b7280' },
-  { category: '設計', hours: 4.5, color: '#d1d5db' },
-  { category: '調査', hours: 3.5, color: '#e5e7eb' },
+const initialTodos: TodoItem[] = [
+  { id: 1, title: '朝のストレッチを10分する', priority: '中', due: '08:30', completed: true },
+  { id: 2, title: '昼休みに散歩する', priority: '低', due: '13:00', completed: false },
+  { id: 3, title: '寝る前にスマホを机に置く', priority: '高', due: '22:30', completed: false },
+  { id: 4, title: '明日の予定を3つだけ整理する', priority: '中', due: '21:30', completed: true },
 ]
 
-const recentRecords: WorkRecord[] = [
-  {
-    id: 1,
-    date: '7/15',
-    dayLabel: '今日',
-    title: 'ダッシュボード画面の実装',
-    category: '開発',
-    durationHours: 3.25,
-    note: 'KPI とグラフの初期実装',
-  },
-  {
-    id: 2,
-    date: '7/15',
-    dayLabel: '今日',
-    title: '週次進捗ミーティング',
-    category: '会議',
-    durationHours: 1,
-    note: '今週の優先度を確認',
-  },
-  {
-    id: 3,
-    date: '7/14',
-    dayLabel: '昨日',
-    title: 'PR レビューと修正確認',
-    category: 'レビュー',
-    durationHours: 2.5,
-    note: 'UI 変更の差分確認',
-  },
-  {
-    id: 4,
-    date: '7/14',
-    dayLabel: '昨日',
-    title: '作業記録モデルの整理',
-    category: '設計',
-    durationHours: 2,
-    note: '集計単位と画面項目を定義',
-  },
-  {
-    id: 5,
-    date: '7/13',
-    dayLabel: '月',
-    title: 'Cloudflare Workers 構成確認',
-    category: '調査',
-    durationHours: 1.75,
-    note: 'ビルドと配信設定を確認',
-  },
-]
+const todayLabel = '2026年7月15日 水曜日'
 
-const totalCategoryHours = categorySummaries.reduce(
-  (total, item) => total + item.hours,
-  0,
-)
+function KpiCard({ item }: { item: KpiItem }) {
+  return (
+    <article className="card kpi-card">
+      <span className="kpi-label">{item.label}</span>
+      <strong>{item.value}</strong>
+      <span className="kpi-helper">{item.helper}</span>
+    </article>
+  )
+}
 
-const maxDailyHours = Math.max(...weeklyHours.map((item) => item.hours))
+function BarChart({
+  title,
+  subtitle,
+  unit,
+  values,
+  valueKey,
+}: {
+  title: string
+  subtitle: string
+  unit: string
+  values: DailyMetric[]
+  valueKey: 'phoneHours' | 'sleepHours'
+}) {
+  const maxValue = Math.max(...values.map((item) => item[valueKey]))
 
-const formatHours = (hours: number) => `${hours.toFixed(hours % 1 === 0 ? 0 : 1)}h`
+  return (
+    <section className="card chart-card">
+      <div className="section-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+      <div className="bar-chart" role="img" aria-label={`${title}の棒グラフ`}>
+        {values.map((item) => {
+          const value = item[valueKey]
 
-function buildPieSegments(items: CategorySummary[]) {
-  let cumulative = 0
+          return (
+            <div className="bar-column" key={`${title}-${item.day}`}>
+              <span className="bar-number">{value.toFixed(1)}</span>
+              <div className="bar-rail">
+                <div className="bar-meter" style={{ height: `${(value / maxValue) * 100}%` }} />
+              </div>
+              <span className="bar-day">{item.day}</span>
+            </div>
+          )
+        })}
+      </div>
+      <p className="chart-note">単位: {unit}</p>
+    </section>
+  )
+}
 
-  return items.map((item) => {
-    const percentage = item.hours / totalCategoryHours
-    const dashArray = `${percentage * 100} ${100 - percentage * 100}`
-    const dashOffset = -cumulative * 100
-    cumulative += percentage
+function TodoList({
+  todos,
+  onToggle,
+}: {
+  todos: TodoItem[]
+  onToggle: (id: number) => void
+}) {
+  return (
+    <section className="card todo-card">
+      <div className="section-heading">
+        <div>
+          <h2>今日のTODO</h2>
+          <p>完了状況、優先度、期限を確認</p>
+        </div>
+      </div>
+      <div className="todo-list">
+        {todos.map((todo) => (
+          <label className="todo-row" key={todo.id}>
+            <input
+              checked={todo.completed}
+              onChange={() => onToggle(todo.id)}
+              type="checkbox"
+            />
+            <span className="todo-title">{todo.title}</span>
+            <span className={`priority priority-${todo.priority}`}>{todo.priority}</span>
+            <span className="todo-due">{todo.due}</span>
+          </label>
+        ))}
+      </div>
+    </section>
+  )
+}
 
-    return {
-      ...item,
-      dashArray,
-      dashOffset,
-      percentage: Math.round(percentage * 100),
-    }
-  })
+function PhoneUsageForm({
+  draft,
+  onChange,
+}: {
+  draft: PhoneUsageDraft
+  onChange: (draft: PhoneUsageDraft) => void
+}) {
+  return (
+    <section className="card form-card">
+      <div className="section-heading">
+        <div>
+          <h2>スマホ時間入力</h2>
+          <p>今日の使用時間を仮入力</p>
+        </div>
+      </div>
+      <form className="form-grid">
+        <label>
+          日付
+          <input
+            onChange={(event) => onChange({ ...draft, date: event.target.value })}
+            type="date"
+            value={draft.date}
+          />
+        </label>
+        <label>
+          使用時間
+          <input
+            min="0"
+            onChange={(event) => onChange({ ...draft, hours: event.target.value })}
+            step="0.1"
+            type="number"
+            value={draft.hours}
+          />
+        </label>
+        <label className="full-width">
+          メモ
+          <textarea
+            onChange={(event) => onChange({ ...draft, memo: event.target.value })}
+            rows={3}
+            value={draft.memo}
+          />
+        </label>
+      </form>
+    </section>
+  )
+}
+
+function SleepForm({
+  draft,
+  onChange,
+}: {
+  draft: SleepDraft
+  onChange: (draft: SleepDraft) => void
+}) {
+  return (
+    <section className="card form-card">
+      <div className="section-heading">
+        <div>
+          <h2>睡眠記録入力</h2>
+          <p>就寝から起床までを記録</p>
+        </div>
+      </div>
+      <form className="form-grid">
+        <label>
+          就寝時刻
+          <input
+            onChange={(event) => onChange({ ...draft, bedtime: event.target.value })}
+            type="time"
+            value={draft.bedtime}
+          />
+        </label>
+        <label>
+          入眠時刻
+          <input
+            onChange={(event) => onChange({ ...draft, sleepStart: event.target.value })}
+            type="time"
+            value={draft.sleepStart}
+          />
+        </label>
+        <label>
+          起床時刻
+          <input
+            onChange={(event) => onChange({ ...draft, wakeTime: event.target.value })}
+            type="time"
+            value={draft.wakeTime}
+          />
+        </label>
+        <label>
+          睡眠満足度
+          <select
+            onChange={(event) => onChange({ ...draft, satisfaction: event.target.value })}
+            value={draft.satisfaction}
+          >
+            <option value="5">5 とても良い</option>
+            <option value="4">4 良い</option>
+            <option value="3">3 普通</option>
+            <option value="2">2 浅い</option>
+            <option value="1">1 不足</option>
+          </select>
+        </label>
+      </form>
+    </section>
+  )
+}
+
+function TodoForm({
+  draft,
+  onChange,
+  onAdd,
+}: {
+  draft: TodoDraft
+  onChange: (draft: TodoDraft) => void
+  onAdd: () => void
+}) {
+  return (
+    <section className="card form-card">
+      <div className="section-heading">
+        <div>
+          <h2>TODO追加</h2>
+          <p>今日やることを仮追加</p>
+        </div>
+      </div>
+      <form
+        className="form-grid"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onAdd()
+        }}
+      >
+        <label className="full-width">
+          TODO
+          <input
+            onChange={(event) => onChange({ ...draft, title: event.target.value })}
+            placeholder="例: 22時以降は通知を切る"
+            type="text"
+            value={draft.title}
+          />
+        </label>
+        <label>
+          優先度
+          <select
+            onChange={(event) => onChange({ ...draft, priority: event.target.value as Priority })}
+            value={draft.priority}
+          >
+            <option value="高">高</option>
+            <option value="中">中</option>
+            <option value="低">低</option>
+          </select>
+        </label>
+        <label>
+          期限
+          <input
+            onChange={(event) => onChange({ ...draft, due: event.target.value })}
+            type="time"
+            value={draft.due}
+          />
+        </label>
+        <button className="primary-button full-width" type="submit">
+          TODOを追加
+        </button>
+      </form>
+    </section>
+  )
 }
 
 function App() {
-  const pieSegments = buildPieSegments(categorySummaries)
+  const [todos, setTodos] = useState<TodoItem[]>(initialTodos)
+  const [phoneDraft, setPhoneDraft] = useState<PhoneUsageDraft>({
+    date: '2026-07-15',
+    hours: '2.8',
+    memo: '夜の動画視聴を短めにできた',
+  })
+  const [sleepDraft, setSleepDraft] = useState<SleepDraft>({
+    bedtime: '23:10',
+    sleepStart: '23:35',
+    wakeTime: '07:00',
+    satisfaction: '4',
+  })
+  const [todoDraft, setTodoDraft] = useState<TodoDraft>({
+    title: '',
+    priority: '中',
+    due: '21:00',
+  })
+
+  const completedCount = todos.filter((todo) => todo.completed).length
+  const kpis: KpiItem[] = [
+    { label: '今日のスマホ使用時間', value: '2.8時間', helper: '昨日より 0.3時間 少なめ' },
+    { label: '昨夜の睡眠時間', value: '7.4時間', helper: '目標 7時間を達成' },
+    { label: '入眠時刻', value: '23:35', helper: '就寝から25分後' },
+    { label: '今日のTODO達成数', value: `${completedCount}/${todos.length}`, helper: '完了チェックで更新' },
+  ]
+
+  const toggleTodo = (id: number) => {
+    setTodos((currentTodos) =>
+      currentTodos.map((todo) =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo,
+      ),
+    )
+  }
+
+  const addTodo = () => {
+    const title = todoDraft.title.trim()
+
+    if (!title) {
+      return
+    }
+
+    setTodos((currentTodos) => [
+      ...currentTodos,
+      {
+        id: Date.now(),
+        title,
+        priority: todoDraft.priority,
+        due: todoDraft.due,
+        completed: false,
+      },
+    ])
+    setTodoDraft({ title: '', priority: '中', due: '21:00' })
+  }
 
   return (
-    <main className="dashboard">
-      <header className="dashboard-header">
+    <main className="dashboard-shell">
+      <header className="top-header">
         <div>
-          <p className="eyebrow">作業時間ダッシュボード</p>
-          <h1>今日の集中度をひと目で確認</h1>
+          <p className="today-label">{todayLabel}</p>
+          <h1>Personal Dashboard</h1>
         </div>
-        <div className="period-chip">2026年7月15日</div>
+        <p className="header-summary">スマホ・睡眠・TODOを一画面で確認</p>
       </header>
 
-      <section className="kpi-grid" aria-label="作業時間の概要">
-        <article className="kpi-card">
-          <span className="kpi-label">今日</span>
-          <strong>{formatHours(7.5)}</strong>
-          <span className="kpi-caption">目標 8h まであと 0.5h</span>
-        </article>
-        <article className="kpi-card">
-          <span className="kpi-label">今週</span>
-          <strong>{formatHours(40.25)}</strong>
-          <span className="kpi-caption">先週比 +3.0h</span>
-        </article>
-        <article className="kpi-card">
-          <span className="kpi-label">今月</span>
-          <strong>{formatHours(118.5)}</strong>
-          <span className="kpi-caption">月間目標の 72%</span>
-        </article>
+      <section className="kpi-grid" aria-label="今日のサマリー">
+        {kpis.map((item) => (
+          <KpiCard item={item} key={item.label} />
+        ))}
       </section>
 
-      <section className="chart-grid">
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>直近7日間</h2>
-              <p>日別の作業時間</p>
-            </div>
-            <span className="panel-total">{formatHours(40.25)}</span>
-          </div>
-          <div className="bar-chart" role="img" aria-label="直近7日間の作業時間の棒グラフ">
-            {weeklyHours.map((item) => (
-              <div className="bar-item" key={item.label}>
-                <span className="bar-value">{formatHours(item.hours)}</span>
-                <div className="bar-track">
-                  <div
-                    className="bar-fill"
-                    style={{ height: `${(item.hours / maxDailyHours) * 100}%` }}
-                  />
-                </div>
-                <span className="bar-label">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>カテゴリ別</h2>
-              <p>今週の内訳</p>
-            </div>
-            <span className="panel-total">{formatHours(totalCategoryHours)}</span>
-          </div>
-          <div className="category-chart">
-            <svg className="pie-chart" viewBox="0 0 42 42" role="img" aria-label="カテゴリ別の作業時間の円グラフ">
-              <circle className="pie-bg" cx="21" cy="21" r="15.915" />
-              {pieSegments.map((segment) => (
-                <circle
-                  className="pie-segment"
-                  cx="21"
-                  cy="21"
-                  key={segment.category}
-                  r="15.915"
-                  stroke={segment.color}
-                  strokeDasharray={segment.dashArray}
-                  strokeDashoffset={segment.dashOffset}
-                />
-              ))}
-            </svg>
-            <ul className="category-list">
-              {pieSegments.map((item) => (
-                <li key={item.category}>
-                  <span className="category-dot" style={{ background: item.color }} />
-                  <span>{item.category}</span>
-                  <strong>
-                    {formatHours(item.hours)} / {item.percentage}%
-                  </strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
+      <section className="charts-grid">
+        <BarChart
+          subtitle="使いすぎを早めに把握"
+          title="直近7日間のスマホ使用時間"
+          unit="時間"
+          valueKey="phoneHours"
+          values={dailyMetrics}
+        />
+        <BarChart
+          subtitle="睡眠リズムの変化を確認"
+          title="直近7日間の睡眠時間"
+          unit="時間"
+          valueKey="sleepHours"
+          values={dailyMetrics}
+        />
       </section>
 
-      <section className="panel records-panel">
-        <div className="panel-header">
-          <div>
-            <h2>最近の作業記録</h2>
-            <p>仮データによる最新 5 件</p>
-          </div>
-        </div>
-        <div className="records-list">
-          {recentRecords.map((record) => (
-            <article className="record-row" key={record.id}>
-              <div className="record-date">
-                <strong>{record.date}</strong>
-                <span>{record.dayLabel}</span>
-              </div>
-              <div className="record-main">
-                <h3>{record.title}</h3>
-                <p>{record.note}</p>
-              </div>
-              <span className="record-category">{record.category}</span>
-              <strong className="record-hours">{formatHours(record.durationHours)}</strong>
-            </article>
-          ))}
+      <section className="main-grid">
+        <TodoList onToggle={toggleTodo} todos={todos} />
+        <div className="forms-stack">
+          <PhoneUsageForm draft={phoneDraft} onChange={setPhoneDraft} />
+          <SleepForm draft={sleepDraft} onChange={setSleepDraft} />
+          <TodoForm draft={todoDraft} onAdd={addTodo} onChange={setTodoDraft} />
         </div>
       </section>
     </main>
